@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Fora do .zip de distribuição (git archive / bin/build-zip.sh)
+/.gitattributes  export-ignore
+/.gitignore      export-ignore
+/README.md       export-ignore
+/package.json    export-ignore
+/package-lock.json export-ignore
+/bin             export-ignore
+/tests           export-ignore

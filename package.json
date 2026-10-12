@@ -1,0 +1,18 @@
+{
+  "name": "jpx-cookies-lgpd",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Banner de cookies para a LGPD com Google Consent Mode v2 — plugin WordPress",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build:js": "terser assets/js/jpxcc.js -c -m --comments \"/^!/\" -o assets/js/jpxcc.min.js",
+    "build:zip": "bash bin/build-zip.sh",
+    "test": "node tests/run.mjs",
+    "test:setup": "bash bin/setup-test-site.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0",
+    "terser": "^5.51.2"
+  }
+}
