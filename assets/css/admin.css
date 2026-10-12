@@ -176,3 +176,14 @@
 	color: #00a32a;
 	font-weight: 600;
 }
+
+.jpxcc-pager {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	margin: 8px 0;
+}
+
+.jpxcc-tableinfo {
+	margin-top: 12px;
+}

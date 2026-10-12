@@ -385,7 +385,7 @@ class JPXCC_Admin {
 					<?php
 					self::checkbox( 'log_enabled', __( 'Registrar', 'jpx-cookies-lgpd' ), __( 'Guardar a prova de cada escolha (recomendado pela LGPD, art. 8º, §2º)', 'jpx-cookies-lgpd' ) );
 					self::select( 'log_ip', __( 'IP do visitante', 'jpx-cookies-lgpd' ) );
-					self::checkbox( 'log_ua', __( 'Navegador', 'jpx-cookies-lgpd' ), __( 'Registrar o user agent', 'jpx-cookies-lgpd' ) );
+					self::checkbox( 'log_ua', __( 'Navegador', 'jpx-cookies-lgpd' ), __( 'Registrar navegador e sistema, de forma resumida (ex.: "Chrome 141 / Android")', 'jpx-cookies-lgpd' ) );
 					self::number( 'retention_days', __( 'Manter registros por', 'jpx-cookies-lgpd' ), 30, 3650, __( 'dias', 'jpx-cookies-lgpd' ), __( 'Registros mais antigos são excluídos automaticamente todos os dias. Defina o prazo com o responsável jurídico.', 'jpx-cookies-lgpd' ) );
 					?>
 				</table>
@@ -575,12 +575,20 @@ class JPXCC_Admin {
 
 	private static function render_logs() {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		$search = isset( $_GET['s'] ) ? preg_replace( '/[^0-9a-f\-]/', '', strtolower( sanitize_text_field( wp_unslash( $_GET['s'] ) ) ) ) : '';
-		$paged  = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+		$search = isset( $_GET['s'] ) ? JPXCC_Consent_Log::normalize_search( sanitize_text_field( wp_unslash( $_GET['s'] ) ) ) : '';
+		$before = isset( $_GET['before'] ) ? absint( $_GET['before'] ) : 0;
+		$after  = isset( $_GET['after'] ) ? absint( $_GET['after'] ) : 0;
 		// phpcs:enable
-		$per   = 50;
-		$data  = JPXCC_Consent_Log::query( $paged, $per, $search );
+		$data  = JPXCC_Consent_Log::query(
+			array(
+				'per_page' => 50,
+				'search'   => $search,
+				'before'   => $before,
+				'after'    => $after,
+			)
+		);
 		$stats = JPXCC_Consent_Log::stats( 30 );
+		$info  = JPXCC_Consent_Log::table_info();
 
 		$cat_defs = JPXCC_Settings::get( 'categories' );
 
@@ -605,7 +613,7 @@ class JPXCC_Admin {
 			<form method="get">
 				<input type="hidden" name="page" value="<?php echo esc_attr( self::SLUG ); ?>">
 				<input type="hidden" name="view" value="registros">
-				<input type="search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php esc_attr_e( 'Buscar por ID de consentimento', 'jpx-cookies-lgpd' ); ?>" class="regular-text">
+				<input type="search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php esc_attr_e( 'Início do ID de consentimento', 'jpx-cookies-lgpd' ); ?>" class="regular-text" maxlength="36" pattern="[0-9a-fA-F\-]*">
 				<?php submit_button( __( 'Buscar', 'jpx-cookies-lgpd' ), 'secondary', '', false ); ?>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -624,11 +632,12 @@ class JPXCC_Admin {
 				<th><?php esc_html_e( 'Categorias', 'jpx-cookies-lgpd' ); ?></th>
 				<th><?php esc_html_e( 'Rev.', 'jpx-cookies-lgpd' ); ?></th>
 				<th><?php esc_html_e( 'IP', 'jpx-cookies-lgpd' ); ?></th>
+				<th><?php esc_html_e( 'Navegador', 'jpx-cookies-lgpd' ); ?></th>
 				<th><?php esc_html_e( 'Página', 'jpx-cookies-lgpd' ); ?></th>
 			</tr></thead>
 			<tbody>
 			<?php if ( ! $data['rows'] ) : ?>
-				<tr><td colspan="7"><?php esc_html_e( 'Nenhum registro encontrado.', 'jpx-cookies-lgpd' ); ?></td></tr>
+				<tr><td colspan="8"><?php esc_html_e( 'Nenhum registro encontrado.', 'jpx-cookies-lgpd' ); ?></td></tr>
 			<?php endif; ?>
 			<?php foreach ( $data['rows'] as $r ) : ?>
 				<tr>
@@ -646,28 +655,49 @@ class JPXCC_Admin {
 					</td>
 					<td><?php echo esc_html( $r['revision'] ); ?></td>
 					<td><?php echo esc_html( $r['ip'] ); ?></td>
+					<td><?php echo esc_html( strlen( $r['user_agent'] ) > 60 ? JPXCC_Consent_Log::summarize_ua( $r['user_agent'] ) : $r['user_agent'] ); ?></td>
 					<td><?php echo esc_html( $r['page'] ); ?></td>
 				</tr>
 			<?php endforeach; ?>
 			</tbody>
 		</table>
 		<?php
-		$pages = (int) ceil( $data['total'] / $per );
-		if ( $pages > 1 ) {
-			echo '<div class="tablenav"><div class="tablenav-pages">';
-			echo wp_kses_post(
-				paginate_links(
+		if ( $data['rows'] && ( $data['has_newer'] || $data['has_older'] ) ) {
+			$base = self::url(
+				array_filter(
 					array(
-						'base'    => add_query_arg( 'paged', '%#%' ),
-						'format'  => '',
-						'current' => $paged,
-						'total'   => $pages,
+						'view' => 'registros',
+						's'    => $search,
 					)
 				)
 			);
-			echo '</div></div>';
+			$first_id = (int) $data['rows'][0]['id'];
+			$last_id  = (int) end( $data['rows'] )['id'];
+			echo '<div class="tablenav jpxcc-pager">';
+			if ( $data['has_newer'] ) {
+				echo '<a class="button" href="' . esc_url( add_query_arg( 'after', $first_id, $base ) ) . '">&larr; ' . esc_html__( 'Mais recentes', 'jpx-cookies-lgpd' ) . '</a> ';
+			}
+			if ( $data['has_older'] ) {
+				echo '<a class="button" href="' . esc_url( add_query_arg( 'before', $last_id, $base ) ) . '">' . esc_html__( 'Mais antigos', 'jpx-cookies-lgpd' ) . ' &rarr;</a>';
+			}
+			echo '</div>';
 		}
 		?>
+
+		<p class="description jpxcc-tableinfo">
+			<?php
+			$size = null !== $info['bytes'] ? ' · ' . size_format( $info['bytes'], 1 ) : '';
+			echo esc_html(
+				sprintf(
+					/* translators: 1: rows, 2: size, 3: retention days */
+					__( 'Tabela: cerca de %1$s registros%2$s. Registros com mais de %3$s dias são apagados automaticamente, em lotes, todos os dias.', 'jpx-cookies-lgpd' ),
+					number_format_i18n( $info['rows'] ),
+					$size,
+					number_format_i18n( (int) JPXCC_Settings::get( 'retention_days' ) )
+				)
+			);
+			?>
+		</p>
 
 		<h2><?php esc_html_e( 'Pedido de exclusão do titular', 'jpx-cookies-lgpd' ); ?></h2>
 		<p class="description"><?php esc_html_e( 'O visitante encontra o próprio ID na janela de preferências. Informe-o aqui para excluir todos os registros ligados a ele (LGPD, art. 18, VI).', 'jpx-cookies-lgpd' ); ?></p>
@@ -745,7 +775,7 @@ class JPXCC_Admin {
 
 	public static function handle_export_csv() {
 		self::guard( 'jpxcc_export_csv' );
-		$search = isset( $_POST['s'] ) ? preg_replace( '/[^0-9a-f\-]/', '', strtolower( sanitize_text_field( wp_unslash( $_POST['s'] ) ) ) ) : '';
+		$search = isset( $_POST['s'] ) ? JPXCC_Consent_Log::normalize_search( sanitize_text_field( wp_unslash( $_POST['s'] ) ) ) : '';
 		JPXCC_Consent_Log::export_csv( $search );
 	}
 

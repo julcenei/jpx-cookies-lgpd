@@ -9,7 +9,7 @@ Desenvolvido pela [Jotapix Agência Criativa](https://jotapix.com).
 - **Consent Mode v2 sempre ativo.** As tags do Google começam negadas e são liberadas pela escolha do visitante. Os scripts do Google (GA4, AdSense, Ad Manager) nunca são bloqueados: quem recusa continua vendo anúncios não personalizados.
 - **Base legal por categoria.** Consentimento (opt-in) ou legítimo interesse (opt-out), com aviso automático no banner. Útil para manter a medição de audiência de quem ignora o banner.
 - **Bloqueio de scripts de terceiros** (Meta Pixel, TikTok, Clarity, Hotjar…) por padrões configuráveis no painel. A reescrita acontece no HTML antes do cache de página, então funciona com cache e Cloudflare.
-- **Registro de consentimentos** como prova (LGPD, art. 8º, §2º): IP anonimizado, retenção automática, exportação CSV, exclusão por ID a pedido do titular e taxa de aceite dos últimos 30 dias.
+- **Registro de consentimentos** como prova (LGPD, art. 8º, §2º): IP anonimizado, navegador resumido, retenção automática com limpeza em lotes, exportação CSV, exclusão por ID a pedido do titular e taxa de aceite dos últimos 30 dias. Paginação por cursor e busca indexada: continua rápido com milhões de linhas.
 - **Banner minimizado.** Ao clicar fora, rolar a página ou após alguns segundos, o aviso vira um atalho discreto até o fim da visita, sem registrar escolha. Nove posições para o atalho.
 - **Validade separada** para quem aceitou (padrão 182 dias) e quem recusou (padrão 90 dias).
 - **Sete modelos de mensagem** prontos, com prévia em cards no painel.
@@ -69,7 +69,7 @@ npm run build:js
 
 ### Testes
 
-Os testes sobem um WordPress local com SQLite (sem MySQL) e simulam visitantes reais no Chromium: banner, Consent Mode, bloqueio de scripts, registro, opt-out, minimização e painel.
+Os testes sobem um WordPress local com SQLite (sem MySQL) e simulam visitantes reais no Chromium: banner, Consent Mode, bloqueio de scripts, registro, opt-out, minimização e painel. A suíte `log` semeia dezenas de milhares de registros para testar paginação, busca e limpeza em lotes, e há um teste unitário do resumo de navegador.
 
 ```bash
 npm run test:setup                                    # cria .test-site/ (uma vez)

@@ -14,6 +14,8 @@ class JPXCC_Consent_Log {
 	const ACTIONS     = array( 'accept_all', 'reject_all', 'custom', 'update' );
 	const RATE_LIMIT  = 30;  // Requisições por IP...
 	const RATE_WINDOW = 600; // ...a cada 10 minutos.
+	const PURGE_BATCH = 5000; // Linhas apagadas por lote na limpeza.
+	const PURGE_MAX   = 40;   // Lotes por execução (o resto continua em 5 minutos).
 
 	/** Nome da tabela. */
 	public static function table() {
@@ -24,6 +26,7 @@ class JPXCC_Consent_Log {
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 		add_action( self::CRON_HOOK, array( __CLASS__, 'purge' ) );
+		add_action( self::CRON_HOOK . '_continue', array( __CLASS__, 'purge' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_install' ) );
 	}
 
@@ -37,6 +40,7 @@ class JPXCC_Consent_Log {
 
 	public static function deactivate() {
 		wp_clear_scheduled_hook( self::CRON_HOOK );
+		wp_clear_scheduled_hook( self::CRON_HOOK . '_continue' );
 	}
 
 	/** Garante tabela e cron (ex.: após atualização ou multisite). */
@@ -153,7 +157,7 @@ class JPXCC_Consent_Log {
 			'categories' => implode( ',', $categories ),
 			'revision'   => max( 0, min( 65535, (int) $request['revision'] ) ),
 			'ip'         => 'anon' === JPXCC_Settings::get( 'log_ip' ) && $ip ? wp_privacy_anonymize_ip( $ip ) : '',
-			'user_agent' => JPXCC_Settings::get( 'log_ua' ) && isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 255 ) : '',
+			'user_agent' => JPXCC_Settings::get( 'log_ua' ) && isset( $_SERVER['HTTP_USER_AGENT'] ) ? self::summarize_ua( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) ) : '',
 			'page'       => substr( sanitize_text_field( $page ), 0, 255 ),
 			'created_at' => gmdate( 'Y-m-d H:i:s' ),
 		);
@@ -220,14 +224,117 @@ class JPXCC_Consent_Log {
 		return ! empty( $found );
 	}
 
-	/** Exclui registros mais antigos que o prazo de retenção. */
+	/**
+	 * Resume o user agent em "Navegador versão / Sistema" (ex.: "Chrome 141 / Android").
+	 * Guarda o suficiente para a prova e ocupa bem menos espaço que o texto completo.
+	 *
+	 * @param string $ua User agent.
+	 * @return string
+	 */
+	public static function summarize_ua( $ua ) {
+		$ua = (string) $ua;
+		if ( '' === trim( $ua ) ) {
+			return '';
+		}
+
+		$browsers = array(
+			'Edge'             => '#Edg(?:e|A|iOS)?/(\d+)#',
+			'Opera'            => '#(?:OPR|OPiOS)/(\d+)#',
+			'Samsung Internet' => '#SamsungBrowser/(\d+)#',
+			'Firefox'          => '#(?:Firefox|FxiOS)/(\d+)#',
+			'Chrome'           => '#(?:Chrome|CriOS)/(\d+)#',
+			'Safari'           => '#Version/(\d+)[\d.]* (?:Mobile/\S+ )?Safari/#',
+		);
+		$browser = __( 'Outro navegador', 'jpx-cookies-lgpd' );
+		foreach ( $browsers as $name => $re ) {
+			if ( preg_match( $re, $ua, $m ) ) {
+				$browser = $name . ' ' . $m[1];
+				break;
+			}
+		}
+		if ( preg_match( '#bot|crawler|spider|crawling#i', $ua ) ) {
+			$browser = __( 'Robô', 'jpx-cookies-lgpd' );
+		}
+
+		$systems = array(
+			'Android' => '#Android#',
+			'iOS'     => '#iPhone|iPad|iPod#',
+			'Windows' => '#Windows#',
+			'macOS'   => '#Mac OS X|Macintosh#',
+			'ChromeOS' => '#CrOS#',
+			'Linux'   => '#Linux#',
+		);
+		$system = __( 'outro sistema', 'jpx-cookies-lgpd' );
+		foreach ( $systems as $name => $re ) {
+			if ( preg_match( $re, $ua ) ) {
+				$system = $name;
+				break;
+			}
+		}
+
+		return substr( $browser . ' / ' . $system, 0, 60 );
+	}
+
+	/**
+	 * Exclui registros mais antigos que o prazo de retenção, em lotes, para não
+	 * travar a tabela. Se sobrar muita coisa (ex.: retenção reduzida de uma vez),
+	 * agenda a continuação para daqui a 5 minutos.
+	 *
+	 * @return int Linhas excluídas nesta execução.
+	 */
 	public static function purge() {
 		global $wpdb;
-		$days  = (int) JPXCC_Settings::get( 'retention_days', 730 );
-		$limit = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$days    = (int) JPXCC_Settings::get( 'retention_days', 730 );
+		$limit   = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$table   = self::table();
+		$deleted = 0;
+
+		for ( $i = 0; $i < self::PURGE_MAX; $i++ ) {
+			// Maior id do lote: apagar por faixa de id é rápido (chave primária) e portátil.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$max_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(id) FROM (SELECT id FROM {$table} WHERE created_at < %s ORDER BY id ASC LIMIT %d) AS lote", $limit, self::PURGE_BATCH ) );
+			if ( ! $max_id ) {
+				return $deleted;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$deleted += (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id <= %d AND created_at < %s", $max_id, $limit ) );
+		}
+
+		if ( ! wp_next_scheduled( self::CRON_HOOK . '_continue' ) ) {
+			wp_schedule_single_event( time() + 5 * MINUTE_IN_SECONDS, self::CRON_HOOK . '_continue' );
+		}
+		return $deleted;
+	}
+
+	/**
+	 * Tamanho aproximado da tabela (linhas e bytes), sem contar linha a linha.
+	 *
+	 * @return array{rows: int, bytes: int|null, exact: bool}
+	 */
+	public static function table_info() {
+		global $wpdb;
 		$table = self::table();
+
+		// MySQL/MariaDB: estatística do próprio banco, instantânea.
+		$suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$info = $wpdb->get_row( $wpdb->prepare( 'SELECT TABLE_ROWS AS r, DATA_LENGTH + INDEX_LENGTH AS b FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ), ARRAY_A );
+		$wpdb->suppress_errors( $suppress );
+
+		// Estimativa pela faixa de ids (só a chave primária). Serve de reserva quando
+		// a estatística do banco está zerada ou desatualizada (tabela recém-criada).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s", $limit ) );
+		$range    = $wpdb->get_row( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$table}", ARRAY_A );
+		$by_range = ( $range && $range['hi'] ) ? (int) $range['hi'] - (int) $range['lo'] + 1 : 0;
+
+		$rows  = ( $info && (int) $info['r'] > 0 ) ? (int) $info['r'] : $by_range;
+		$bytes = ( $info && (int) $info['b'] > 0 ) ? (int) $info['b'] : null;
+
+		return array(
+			'rows'  => $rows,
+			'bytes' => $bytes,
+			'exact' => false,
+		);
 	}
 
 	/**
@@ -263,31 +370,85 @@ class JPXCC_Consent_Log {
 	}
 
 	/**
-	 * Lista paginada.
+	 * Normaliza a busca: só caracteres de UUID, em minúsculas.
 	 *
-	 * @param int    $page     Página (1+).
-	 * @param int    $per_page Itens por página.
-	 * @param string $search   ID de consentimento (parcial).
-	 * @return array{rows: array, total: int}
+	 * @param string $search Texto digitado.
+	 * @return string
 	 */
-	public static function query( $page = 1, $per_page = 50, $search = '' ) {
+	public static function normalize_search( $search ) {
+		return substr( preg_replace( '/[^0-9a-f\-]/', '', strtolower( (string) $search ) ), 0, 36 );
+	}
+
+	/**
+	 * Lista paginada por cursor (rápida com milhões de linhas: não usa OFFSET nem COUNT).
+	 *
+	 * @param array $args {
+	 *     @type int    $before   Lista ids menores que este (páginas mais antigas).
+	 *     @type int    $after    Lista ids maiores que este (páginas mais recentes).
+	 *     @type int    $per_page Itens por página.
+	 *     @type string $search   Início do ID de consentimento (usa o índice).
+	 * }
+	 * @return array{rows: array, has_older: bool, has_newer: bool}
+	 */
+	public static function query( array $args = array() ) {
 		global $wpdb;
 		$table  = self::table();
-		$offset = max( 0, ( $page - 1 ) * $per_page );
+		$per    = max( 1, (int) ( $args['per_page'] ?? 50 ) );
+		$before = (int) ( $args['before'] ?? 0 );
+		$after  = (int) ( $args['after'] ?? 0 );
+		$search = self::normalize_search( $args['search'] ?? '' );
 
+		$where  = array( '1=1' );
+		$params = array();
 		if ( '' !== $search ) {
-			$like = '%' . $wpdb->esc_like( $search ) . '%';
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE consent_id LIKE %s", $like ) );
-			$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE consent_id LIKE %s ORDER BY id DESC LIMIT %d OFFSET %d", $like, $per_page, $offset ), ARRAY_A );
-		} else {
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-			$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d", $per_page, $offset ), ARRAY_A );
-			// phpcs:enable
+			$where[]  = 'consent_id LIKE %s';
+			$params[] = $wpdb->esc_like( $search ) . '%';
 		}
+
+		$cond = $where;
+		if ( $after ) {
+			$cond[] = 'id > %d';
+			$order  = 'ASC';
+			$cparams = array_merge( $params, array( $after ) );
+		} else {
+			if ( $before ) {
+				$cond[] = 'id < %d';
+			}
+			$order   = 'DESC';
+			$cparams = $before ? array_merge( $params, array( $before ) ) : $params;
+		}
+
+		$sql  = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $cond ) . " ORDER BY id {$order} LIMIT %d";
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $cparams, array( $per + 1 ) ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = (array) $rows;
+
+		$more = count( $rows ) > $per;
+		$rows = array_slice( $rows, 0, $per );
+		if ( 'ASC' === $order ) {
+			$rows = array_reverse( $rows );
+		}
+
+		$has_older = $after ? true : $more;
+		$has_newer = $after ? $more : (bool) $before;
+
+		// Confirma se há mesmo algo além das bordas (evita botão para página vazia).
+		if ( $rows ) {
+			$first = (int) $rows[0]['id'];
+			$last  = (int) end( $rows )['id'];
+			$base  = implode( ' AND ', $where );
+			if ( $after ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+				$has_older = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE {$base} AND id < %d LIMIT 1", array_merge( $params, array( $last ) ) ) );
+			} elseif ( $before ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+				$has_newer = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE {$base} AND id > %d LIMIT 1", array_merge( $params, array( $first ) ) ) );
+			}
+		}
+
 		return array(
-			'rows'  => (array) $rows,
-			'total' => $total,
+			'rows'      => $rows,
+			'has_older' => $has_older,
+			'has_newer' => $has_newer,
 		);
 	}
 
@@ -313,12 +474,12 @@ class JPXCC_Consent_Log {
 
 		$out = fopen( 'php://output', 'w' );
 		fwrite( $out, "\xEF\xBB\xBF" ); // BOM para o Excel abrir acentos corretamente.
-		fputcsv( $out, array( 'id', 'consent_id', 'acao', 'categorias', 'revisao', 'ip', 'user_agent', 'pagina', 'data_utc' ), ';' );
+		fputcsv( $out, array( 'id', 'consent_id', 'acao', 'categorias', 'revisao', 'ip', 'navegador', 'pagina', 'data_utc' ), ';' );
 
 		$last = PHP_INT_MAX;
 		do {
 			if ( '' !== $search ) {
-				$like = '%' . $wpdb->esc_like( $search ) . '%';
+				$like = $wpdb->esc_like( self::normalize_search( $search ) ) . '%';
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE id < %d AND consent_id LIKE %s ORDER BY id DESC LIMIT 2000", $last, $like ), ARRAY_A );
 			} else {

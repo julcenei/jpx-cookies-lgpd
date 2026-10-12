@@ -2,10 +2,11 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { BASE, set, setBasis } from './e2e/_env.mjs';
+import { BASE, SITE, set, setBasis } from './e2e/_env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['opt-in', 'opt-out', 'minimize', 'presets', 'admin'];
+// O registro (log) roda por último: ele limpa a tabela ao terminar.
+const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['opt-in', 'opt-out', 'minimize', 'presets', 'admin', 'log'];
 
 function reset() {
 	setBasis('consent');
@@ -21,6 +22,12 @@ try {
 }
 
 let failed = 0;
+
+if (!process.argv.slice(2).length) {
+	console.log('\n━━ unit: resumo de navegador ━━');
+	const u = spawnSync('php', [path.join(here, 'unit', 'ua-summary.php'), SITE], { stdio: 'inherit' });
+	if (u.status !== 0) failed++;
+}
 for (const name of suites) {
 	reset();
 	console.log(`\n━━ ${name} ━━`);

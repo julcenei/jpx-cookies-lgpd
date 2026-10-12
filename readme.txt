@@ -4,7 +4,7 @@ Tags: lgpd, cookies, consentimento, consent mode, google analytics
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,12 @@ Não. Os scripts do Google nunca são bloqueados; o Consent Mode informa a recus
 Não como usuários comuns. Eles geram sinais sem cookies que o GA4 usa na modelagem comportamental quando o volume mínimo exigido pelo Google é atingido. Ative a identidade de relatórios "Combinada" no GA4.
 
 == Changelog ==
+
+= 1.2.1 =
+* Registro preparado para milhões de linhas: paginação por cursor (sem contar a tabela inteira) e busca pelo início do ID, que usa o índice.
+* Limpeza diária em lotes de 5 mil linhas; se sobrar muito (ex.: retenção reduzida), continua sozinha em 5 minutos, sem travar a tabela.
+* Navegador gravado de forma resumida ("Chrome 141 / Android"), ocupando bem menos espaço. Registros antigos são exibidos já resumidos.
+* Tamanho aproximado da tabela na aba Registros.
 
 = 1.2.0 =
 * Minimizar sem decisão: clique fora, rolagem de meia tela e tempo configurável (padrão 10 s). Fica minimizado até o fim da visita; nada é registrado e nenhuma categoria muda de estado.

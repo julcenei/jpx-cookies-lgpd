@@ -10,6 +10,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 $jpxcc_settings = get_option( 'jpx_cookies_lgpd_settings', array() );
 
 wp_clear_scheduled_hook( 'jpxcc_purge_consent_log' );
+wp_clear_scheduled_hook( 'jpxcc_purge_consent_log_continue' );
 
 if ( empty( $jpxcc_settings['delete_on_uninstall'] ) ) {
 	return;
