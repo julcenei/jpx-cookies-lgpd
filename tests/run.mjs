@@ -6,9 +6,10 @@ import { BASE, SITE, set, setBasis } from './e2e/_env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // O registro (log) roda por último: ele limpa a tabela ao terminar.
-const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['opt-in', 'opt-out', 'minimize', 'presets', 'admin', 'log'];
+const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['opt-in', 'opt-out', 'minimize', 'conflict', 'presets', 'admin', 'log'];
 
 function reset() {
+	spawnSync('php', [path.join(here, 'helpers', 'log.php'), SITE, 'reset-limits']);
 	setBasis('consent');
 	set('shortcut_position=right-middle', 'minimize_delay=10', 'floating_button=0', 'show_mode=load', 'test_mode=0', 'revision=1');
 }

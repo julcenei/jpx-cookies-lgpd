@@ -41,7 +41,10 @@ class JPXCC_Frontend {
 
 	/**
 	 * Primeiro script da página: define o Consent Mode como "negado" e aplica
-	 * a escolha salva do visitante antes de qualquer tag do Google.
+	 * a escolha salva do visitante (ou o legítimo interesse) antes de qualquer
+	 * tag do Google. A escolha vai como "update", e não como "default": no Consent
+	 * Mode o update sempre prevalece, então outro código que declare um "default"
+	 * depois (tema, snippet antigo, outro plugin) não consegue anulá-la.
 	 */
 	public static function print_head() {
 		if ( ! self::is_active() ) {
@@ -98,7 +101,8 @@ w.JPXCC_MAP=m;var s={valid:false,cats:[]};
 try{var k=d.cookie.match(new RegExp("(?:^|;\\s*)"+H.n+"=([^;]*)"));
 if(k){var v=JSON.parse(decodeURIComponent(k[1]));if(v&&v.consentId&&v.consentTimestamp&&Array.isArray(v.categories)&&+v.revision===H.r){s={valid:true,cats:v.categories,id:v.consentId};}}}catch(e){}
 if(!s.valid&&o.length){s.cats=o.slice();s.implicit=true;}
-var x=m(s.cats);if(H.w&&!s.valid){x.wait_for_update=H.w;}w.gtag("consent","default",x);
+var x=m([]);if(H.w&&!s.valid&&!s.implicit){x.wait_for_update=H.w;}w.gtag("consent","default",x);
+if(s.valid||s.implicit){w.gtag("consent","update",m(s.cats));}
 if(H.a){w.gtag("set","ads_data_redaction",true);}if(H.u){w.gtag("set","url_passthrough",true);}
 if(s.valid||s.implicit){dl.push({event:"jpxcc_consent",jpxcc_categories:s.cats.join(","),jpxcc_implicit:!!s.implicit});}
 w.JPXCC_STATE=s;})(window,document);

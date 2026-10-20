@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter } from './_env.mjs';
+import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter, effectiveConsent } from './_env.mjs';
 
 const rep = reporter();
 const ok = rep.ok;
@@ -62,7 +62,8 @@ const browser = await chromium.launch();
 	ok('visitante recorrente não baixa a biblioteca', log.lib === libBefore, `downloads: ${log.lib}`);
 	ok('banner não reaparece', !(await page.$('#cc-main .cm')));
 	cmds = await consentCmds(page);
-	ok('head aplica escolha salva já no default', cmds.length === 1 && cmds[0].t === 'default' && cmds[0].a === 'denied', JSON.stringify(cmds));
+	const effR = await effectiveConsent(page);
+	ok('head aplica a escolha salva (recusa) já no carregamento', cmds[0].t === 'default' && effR.analytics === 'denied' && effR.ads === 'denied', JSON.stringify(cmds));
 
 	// Abre preferências pelo link do rodapé e libera tudo
 	await page.click('a.jpxcc-prefs-link');

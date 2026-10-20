@@ -14,6 +14,18 @@
 	w.JPXCC_LOADED = true;
 
 	var S = w.JPXCC_STATE || { valid: false, cats: [] };
+
+	// Aviso para o desenvolvedor: outro código também declara o Consent Mode ou o url_passthrough.
+	try {
+		var defaults = (w.dataLayer || []).filter(function (e) { return e && e[0] === 'consent' && e[1] === 'default'; }).length;
+		var passthrough = (w.dataLayer || []).some(function (e) { return e && e[0] === 'set' && e[1] === 'url_passthrough' && e[2]; });
+		if (defaults > 1 && w.console) {
+			w.console.warn('[JPX Cookies LGPD] Há ' + defaults + ' declarações de consent "default" na página. Remova o Consent Mode inserido por tema, snippet ou outro plugin: o JPX Cookies LGPD já faz isso.');
+		}
+		if (passthrough && w.console) {
+			w.console.warn('[JPX Cookies LGPD] url_passthrough está ativo (parâmetro _gl nos links).');
+		}
+	} catch (e) { /* diagnóstico nunca quebra a página */ }
 	var map = w.JPXCC_MAP;
 	var libState = 0; // 0 = não carregada, 1 = carregando, 2 = pronta
 	var libQueue = [];

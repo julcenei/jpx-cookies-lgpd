@@ -12,8 +12,12 @@ class JPXCC_Consent_Log {
 	const CRON_HOOK   = 'jpxcc_purge_consent_log';
 	const REST_NS     = 'jpx-cookies/v1';
 	const ACTIONS     = array( 'accept_all', 'reject_all', 'custom', 'update' );
-	const RATE_LIMIT  = 30;  // Requisições por IP...
-	const RATE_WINDOW = 600; // ...a cada 10 minutos.
+	// Limites anti-abuso por janela de 10 minutos. O teto por IP é alto porque, no
+	// celular, muitos visitantes saem pelo mesmo IP da operadora (CGNAT); o limite
+	// apertado é por ID de consentimento (um mesmo navegador repetindo envios).
+	const RATE_LIMIT_IP = 300;
+	const RATE_LIMIT_ID = 10;
+	const RATE_WINDOW   = 600;
 	const PURGE_BATCH = 5000; // Linhas apagadas por lote na limpeza.
 	const PURGE_MAX   = 40;   // Lotes por execução (o resto continua em 5 minutos).
 
@@ -139,7 +143,7 @@ class JPXCC_Consent_Log {
 		}
 
 		$ip = self::client_ip();
-		if ( self::rate_limited( $ip ) ) {
+		if ( self::rate_limited( 'ip' . $ip, self::RATE_LIMIT_IP ) || self::rate_limited( 'id' . strtolower( $request['consent_id'] ), self::RATE_LIMIT_ID ) ) {
 			return new WP_REST_Response( array( 'error' => 'rate_limited' ), 429 );
 		}
 
@@ -204,10 +208,17 @@ class JPXCC_Consent_Log {
 		return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
 	}
 
-	private static function rate_limited( $ip ) {
-		$key   = 'jpxcc_rl_' . md5( $ip . wp_salt( 'nonce' ) );
+	/**
+	 * Conta uma requisição para a chave e diz se o limite foi excedido.
+	 *
+	 * @param string $subject IP ou ID de consentimento (com prefixo).
+	 * @param int    $limit   Máximo na janela.
+	 * @return bool
+	 */
+	private static function rate_limited( $subject, $limit ) {
+		$key   = 'jpxcc_rl_' . md5( $subject . wp_salt( 'nonce' ) );
 		$count = (int) get_transient( $key );
-		if ( $count >= self::RATE_LIMIT ) {
+		if ( $count >= $limit ) {
 			return true;
 		}
 		set_transient( $key, $count + 1, self::RATE_WINDOW );

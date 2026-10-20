@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter } from './_env.mjs';
+import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter, effectiveConsent } from './_env.mjs';
 
 const rep = reporter();
 const ok = rep.ok;
@@ -34,7 +34,8 @@ setBasis('legit');
 	await p.goto(BASE);
 	await p.waitForSelector('#cc-main .cm', { state: 'visible' });
 	const c = await consent(p);
-	ok('default: estatísticas liberadas, publicidade negada', c[0].t === 'default' && c[0].a === 'granted' && c[0].m === 'denied', JSON.stringify(c[0]));
+	const eff0 = await effectiveConsent(p);
+	ok('legítimo interesse: estatísticas liberadas, publicidade negada', c[0].t === 'default' && c[0].a === 'denied' && eff0.analytics === 'granted' && eff0.ads === 'denied', JSON.stringify(c));
 	ok('script de estatísticas roda antes de qualquer clique', await p.evaluate(() => window.__clarityModule === true));
 	ok('pixel (publicidade) continua bloqueado', !(await p.evaluate(() => window.__pixelRan)));
 	const desc = await p.textContent('#cc-main .cm__desc');
@@ -43,7 +44,7 @@ setBasis('legit');
 
 	await p.reload();
 	await p.waitForSelector('#cc-main .cm', { state: 'visible' });
-	ok('quem ignora segue contado na página seguinte', (await consent(p))[0].a === 'granted');
+	ok('quem ignora segue contado na página seguinte', (await effectiveConsent(p)).analytics === 'granted');
 	ok('ignorar não gera registro de consentimento', log.posts.length === 0, String(log.posts.length));
 
 	await p.click('#cc-main [data-role="show"]');
@@ -89,7 +90,8 @@ setBasis('legit');
 await op.reload();
 await op.waitForTimeout(600);
 const oc = await consent(op);
-ok('recusa anterior é respeitada após ligar o opt-out', oc.length === 1 && oc[0].a === 'denied' && !(await op.isVisible('#cc-main .cm')), JSON.stringify(oc));
+const effOld = await effectiveConsent(op);
+ok('recusa anterior é respeitada após ligar o opt-out', effOld.analytics === 'denied' && effOld.ads === 'denied' && !(await op.isVisible('#cc-main .cm')), JSON.stringify(oc));
 await old.ctx.close();
 
 setBasis('consent');

@@ -4,7 +4,8 @@
  *   php log.php <pasta-do-site> seed <quantidade> <dias-atras> [prefixo]
  *   php log.php <pasta-do-site> count [dias]        (linhas; com dias = mais antigas que N dias)
  *   php log.php <pasta-do-site> purge
- *   php log.php <pasta-do-site> clear
+ *   php log.php <pasta-do-site> clear           (apaga registros e contadores anti-abuso)
+ *   php log.php <pasta-do-site> reset-limits    (só os contadores anti-abuso)
  *
  * @package JPX_Cookies_LGPD
  */
@@ -52,6 +53,14 @@ switch ( $jpxcc_cmd ) {
 
 	case 'clear':
 		$wpdb->query( "DELETE FROM {$jpxcc_table}" ); // phpcs:ignore
+		// Zera também os contadores anti-abuso.
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_jpxcc\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_jpxcc\\_rl\\_%'" ); // phpcs:ignore
+		echo "ok\n";
+		break;
+
+	case 'reset-limits':
+		// Só os contadores anti-abuso, para as suítes não interferirem entre si.
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_jpxcc\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_jpxcc\\_rl\\_%'" ); // phpcs:ignore
 		echo "ok\n";
 		break;
 

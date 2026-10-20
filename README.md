@@ -69,7 +69,7 @@ npm run build:js
 
 ### Testes
 
-Os testes sobem um WordPress local com SQLite (sem MySQL) e simulam visitantes reais no Chromium: banner, Consent Mode, bloqueio de scripts, registro, opt-out, minimização e painel. A suíte `log` semeia dezenas de milhares de registros para testar paginação, busca e limpeza em lotes, e há um teste unitário do resumo de navegador.
+Os testes sobem um WordPress local com SQLite (sem MySQL) e simulam visitantes reais no Chromium: banner, Consent Mode, bloqueio de scripts, registro, opt-out, minimização e painel. A suíte `conflict` reproduz um Consent Mode duplicado inserido por outro código e mede, com o gtag.js real do Google (servido localmente; nenhum hit é enviado), o `gcs` de cada page_view. A suíte `log` semeia dezenas de milhares de registros para testar paginação, busca e limpeza em lotes, e há um teste unitário do resumo de navegador.
 
 ```bash
 npm run test:setup                                    # cria .test-site/ (uma vez)

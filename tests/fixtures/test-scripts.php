@@ -29,3 +29,19 @@ add_action(
 		echo do_shortcode( '<p>[jpx_cookies_preferencias]</p>' );
 	}
 );
+
+/*
+ * Cenário de conflito (ativado pela opção jpxcc_test_conflict): reproduz um
+ * snippet antigo que declara o Consent Mode tudo negado depois do plugin e liga
+ * o url_passthrough, como o encontrado em um portal real.
+ */
+add_action(
+	'wp_head',
+	static function () {
+		if ( ! get_option( 'jpxcc_test_conflict' ) ) {
+			return;
+		}
+		echo "<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('consent','default',{'analytics_storage':'denied','ad_storage':'denied','ad_user_data':'denied','ad_personalization':'denied','wait_for_update':500});gtag('set','url_passthrough',true);gtag('set','ads_data_redaction',true);</script>\n";
+	},
+	8
+);

@@ -4,7 +4,7 @@ Tags: lgpd, cookies, consentimento, consent mode, google analytics
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,11 @@ Não. Os scripts do Google nunca são bloqueados; o Consent Mode informa a recus
 Não como usuários comuns. Eles geram sinais sem cookies que o GA4 usa na modelagem comportamental quando o volume mínimo exigido pelo Google é atingido. Ative a identidade de relatórios "Combinada" no GA4.
 
 == Changelog ==
+
+= 1.2.2 =
+* Correção: a escolha salva do visitante e o legítimo interesse passam a ser aplicados como "update" do Consent Mode, que sempre prevalece. Antes, um Consent Mode declarado depois por tema, snippet antigo ou outro plugin anulava a escolha, e o GA4 deixava de contar quem aceitou (nas páginas seguintes) e quem ignorou o banner em legítimo interesse.
+* Aviso no console do navegador quando outro código também declara o Consent Mode ou ativa o url_passthrough.
+* Limite anti-abuso do registro ajustado para redes móveis (muitos visitantes no mesmo IP da operadora): teto de 300 envios por IP e 10 por ID de consentimento a cada 10 minutos.
 
 = 1.2.1 =
 * Registro preparado para milhões de linhas: paginação por cursor (sem contar a tabela inteira) e busca pelo início do ID, que usa o índice.

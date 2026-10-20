@@ -3,7 +3,7 @@
  * Plugin Name:       JPX Cookies LGPD
  * Plugin URI:        https://jotapix.com
  * Description:       Banner de consentimento de cookies em conformidade com a LGPD, com Google Consent Mode v2, bloqueio configurável de scripts de terceiros e registro de consentimentos.
- * Version:           1.2.1
+ * Version:           1.2.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Jotapix Agência Criativa
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'JPXCC_VERSION', '1.2.1' );
+define( 'JPXCC_VERSION', '1.2.2' );
 define( 'JPXCC_DB_VERSION', '1' );
 define( 'JPXCC_FILE', __FILE__ );
 define( 'JPXCC_DIR', plugin_dir_path( __FILE__ ) );

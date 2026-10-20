@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter } from './_env.mjs';
+import { BASE, SHOTS, ADMIN_USER, ADMIN_PASS, set, setBasis, humanContext, reporter, effectiveConsent } from './_env.mjs';
 
 const rep = reporter();
 const ok = rep.ok;
@@ -134,7 +134,7 @@ for (const pos of ['bottom-left', 'left-middle', 'bottom-center', 'right-low']) 
 	await p.waitForTimeout(400);
 	await p.reload();
 	await p.waitForTimeout(600);
-	ok('opt-out minimizado: estatísticas seguem liberadas', (await consent(p))[0] === 'granted' && await p.isVisible('#jpxcc-pill'));
+	ok('opt-out minimizado: estatísticas seguem liberadas', (await effectiveConsent(p)).analytics === 'granted' && await p.isVisible('#jpxcc-pill'));
 	ok('opt-out minimizado: nada registrado', log.posts.length === 0);
 	await ctx.close();
 }

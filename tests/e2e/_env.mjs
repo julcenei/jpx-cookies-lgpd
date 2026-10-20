@@ -30,6 +30,26 @@ export async function humanContext(browser, options = {}) {
 	return ctx;
 }
 
+/**
+ * Consentimento efetivo segundo as regras do Consent Mode: o último "update"
+ * prevalece sobre qualquer "default"; sem update, vale o último "default".
+ * Retorna { analytics, ads, defaults, updates } com 'granted' | 'denied'.
+ */
+export const effectiveConsent = (page) => page.evaluate(() => {
+	const cmds = (window.dataLayer || []).filter((e) => e && e[0] === 'consent');
+	const pick = (type, key) => {
+		const list = cmds.filter((e) => e[1] === type && e[2] && e[2][key] !== undefined);
+		return list.length ? list[list.length - 1][2][key] : undefined;
+	};
+	const val = (key) => (pick('update', key) !== undefined ? pick('update', key) : pick('default', key));
+	return {
+		analytics: val('analytics_storage'),
+		ads: val('ad_storage'),
+		defaults: cmds.filter((e) => e[1] === 'default').length,
+		updates: cmds.filter((e) => e[1] === 'update').length,
+	};
+});
+
 export function reporter() {
 	const results = [];
 	return {
